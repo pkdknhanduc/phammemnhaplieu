@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tạo phiếu nhập kho</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="./nhacungcap-data.js"></script>
+<style>
+:root{--primary:#1769aa;--ink:#17212b;--muted:#64748b;--line:#cbd5e1;--bg:#f1f5f9}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:Arial,sans-serif;color:var(--ink)}
+.app{max-width:1200px;margin:28px auto;padding:0 18px}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:18px}
+h1{font-size:25px;margin:0 0 6px}.sub{color:var(--muted);font-size:14px}
+.panel{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px;margin-bottom:18px;box-shadow:0 3px 12px #0f172a0a}
+.upload-row{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.filebox{border:2px dashed #94a3b8;border-radius:9px;padding:16px;flex:1;min-width:250px}
+input[type=file]{max-width:100%}
+button{border:0;border-radius:8px;padding:11px 16px;font-weight:700;cursor:pointer}
+.primary{background:var(--primary);color:#fff}.secondary{background:#e2e8f0;color:#1e293b}
+button:disabled{opacity:.45;cursor:not-allowed}
+.status{font-size:13px;color:var(--muted);margin-top:10px}
+.fields{display:grid;grid-template-columns:repeat(3,minmax(160px,1fr));gap:12px;margin-top:14px}
+label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+.fields input,.fields select{width:100%;padding:9px;border:1px solid var(--line);border-radius:7px;font:inherit}
+.supplier-picker{position:relative}
+.supplier-options{position:absolute;z-index:5;top:100%;left:0;right:0;max-height:240px;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:7px;box-shadow:0 4px 12px #0f172a1a}
+.supplier-options[hidden]{display:none}
+.supplier-option{padding:9px 10px;cursor:pointer;font-size:14px}
+.supplier-option:hover,.supplier-option.active{background:#eaf3fb}
+.supplier-empty{padding:9px 10px;color:var(--muted);font-size:13px}
+.preview-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+.preview-head h2{font-size:18px;margin:0}
+.paper-wrap{overflow:auto;background:#e2e8f0;padding:18px;border-radius:8px}
+.paper{background:white;width:210mm;min-height:297mm;margin:0 auto;padding:14mm 15mm;color:#111;font-family:"Times New Roman",serif;font-size:13px;box-shadow:0 2px 12px #0002}
+.paper table{border-collapse:collapse;width:100%;table-layout:fixed}
+.paper td,.paper th{border:1px solid #333;padding:5px 4px;overflow-wrap:anywhere}
+.paper .no-border td{border:0;padding:2px 0}
+.paper .center{text-align:center}.paper .right{text-align:right}.paper .bold{font-weight:bold}
+.paper .title{font-size:20px;font-weight:bold;letter-spacing:.5px}
+.paper .italic{font-style:italic}.paper .meta{font-size:11px}
+.paper .items th{height:38px;text-align:center}.paper .items td{height:30px}
+.paper .items .num{text-align:center}.paper .items .money{text-align:right}
+.paper .total td{font-weight:bold}.paper .sign{height:28px}
+.paper .signatures td{border:0;text-align:center;width:25%;vertical-align:top;padding-top:8px}
+.empty{color:#94a3b8;text-align:center;padding:35px}
+@media(max-width:700px){.fields{grid-template-columns:1fr 1fr}.topbar{align-items:flex-start;flex-direction:column}.paper{margin:0}}
+@page{size:A4;margin:10mm}
+@media print{
+ body{background:#fff}.app{max-width:none;margin:0;padding:0}.no-print{display:none!important}
+ .panel{border:0;box-shadow:none;padding:0;margin:0}.paper-wrap{padding:0;background:#fff;overflow:visible}
+ .paper{width:100%;min-height:0;margin:0;padding:0;box-shadow:none;font-size:12px}
+ .paper .items th{height:32px}.paper .items td{height:25px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar no-print">
+    <div><h1>Phiếu nhập kho</h1><div class="sub">Tự động lấy dữ liệu từ Excel và điền vào mẫu phiếu nhập kho</div></div>
+    <button class="secondary" onclick="window.print()" id="printBtn" disabled>In / Lưu PDF</button>
+  </div>
+
+  <section class="panel no-print">
+    <div class="upload-row">
+      <div class="filebox">
+        <strong>1. Chọn file Excel dữ liệu</strong><br><br>
+        <input type="file" id="excelFile" accept=".xlsx,.xls,.xlsm">
+        <div class="status" id="status">Chưa có file. Chọn file Excel để bắt đầu.</div>
+      </div>
+      <button class="primary" id="loadBtn">Đọc Excel</button>
+    </div>
+    <div class="fields">
+      <div><label>Ngày nhập (tự lấy từ Excel)</label><input id="receiptDate" placeholder="dd/mm/yyyy"></div>
+      <div hidden><label>Số phiếu</label><input id="receiptNo" placeholder="Nhập số phiếu nếu có"></div>
+      <div hidden><label>Người giao hàng</label><input id="supplier" placeholder="Họ tên người giao"></div>
+      <div><label>Theo hóa đơn số</label><input id="invoiceNo" placeholder="Số hóa đơn"></div>
+      <div class="supplier-picker">
+        <label for="fromName">Của</label>
+        <input id="fromName" placeholder="Gõ để tìm nhà cung cấp" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="supplierOptions">
+        <div id="supplierOptions" class="supplier-options" role="listbox" hidden></div>
+      </div>
+      <div hidden><label>Nhập tại kho</label><input id="warehouse" value="Kho thuốc PK"></div>
+      <div hidden><label>Địa điểm</label><input id="location" placeholder="Địa điểm"></div>
+      <div hidden><label>Người nhập kho</label><input id="receiver" value="Quản lý"></div>
+      <div hidden><label>Số chứng từ kèm theo</label><input id="documents" placeholder="Thông tin chứng từ"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="preview-head no-print">
+      <h2>2. Xem trước phiếu nhập kho</h2>
+      <span class="sub" id="itemCount">0 vật tư</span>
+    </div>
+    <div class="paper-wrap">
+      <div class="paper" id="paper">
+        <div class="empty">Vui lòng tải file Excel dữ liệu lên để tạo phiếu nhập kho.</div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+let items = [];
+let workbookRows = [];
+
+const $ = id => document.getElementById(id);
+const norm = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').toLowerCase().replace(/[^a-z0-9]/g,'');
+function excelDate(value){
+  if(value instanceof Date && !isNaN(value)) return value;
+  if(typeof value === 'number' && value > 20000 && value < 80000){
+    const p = XLSX.SSF.parse_date_code(value);
+    return new Date(p.y,p.m-1,p.d,p.H||0,p.M||0,p.S||0);
+  }
+  if(typeof value === 'string'){
+    const s=value.trim();
+    let m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+    if(m) return new Date(+m[3],+m[2]-1,+m[1]);
+    const d=new Date(s); if(!isNaN(d)) return d;
+  }
+  return null;
+}
+function fmtDate(v){
+  const d=excelDate(v); if(!d) return String(v ?? '');
+  return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+}
+function number(v){
+  if(typeof v==='number') return v;
+  if(v==null || v==='') return 0;
+  const n=Number(String(v).replace(/[^\d,.-]/g,'').replace(/\.(?=.*\.)/g,'').replace(',','.'));
+  return Number.isFinite(n)?n:0;
+}
+function money(v){return Math.round(number(v)).toLocaleString('vi-VN');}
+function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+const ones=['không','một','hai','ba','bốn','năm','sáu','bảy','tám','chín'];
+function readThree(n,full){
+  let h=Math.floor(n/100),t=Math.floor(n%100/10),u=n%10,out='';
+  if(full||h) out+=ones[h]+' trăm ';
+  if(t===0&&u>0){if(full||h)out+='lẻ ';out+=ones[u];}
+  else if(t===1){out+='mười ';out+=(u===5?'lăm':u?ones[u]:'');}
+  else if(t>1){out+=ones[t]+' mươi ';if(u===1)out+='mốt';else if(u===5)out+='lăm';else if(u)out+=ones[u];}
+  return out.trim();
+}
+function numberToWords(value){
+  let n=Math.round(Math.abs(value));
+  if(!n)return 'Không đồng';
+  const units=['','nghìn','triệu','tỷ','nghìn tỷ','triệu tỷ'];
+  let groups=[];
+  while(n>0){groups.unshift(n%1000);n=Math.floor(n/1000);}
+  let parts=[];
+  groups.forEach((g,i)=>{if(g){let idx=groups.length-1-i;parts.push(readThree(g,idx<groups.length-1)+' '+units[idx]);}});
+  let s=parts.join(' ').replace(/\s+/g,' ').trim();
+  return s.charAt(0).toUpperCase()+s.slice(1)+' đồng';
+}
+function findHeader(headers, aliases){
+  const h=headers.map(norm);
+  for(const a of aliases){const idx=h.indexOf(norm(a));if(idx>=0)return idx;}
+  for(let i=0;i<h.length;i++) if(aliases.some(a=>h[i].includes(norm(a)))) return i;
+  return -1;
+}
+function parseWorkbook(wb){
+  const ws=wb.Sheets[wb.SheetNames[0]];
+  const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:true});
+  let headerIndex=rows.findIndex(r=>r.some(v=>norm(v)==='tenvattu') && r.some(v=>norm(v)==='ma'));
+  if(headerIndex<0) headerIndex=rows.findIndex(r=>r.filter(v=>String(v).trim()).length>=5);
+  if(headerIndex<0) throw new Error('Không tìm thấy dòng tiêu đề trong file Excel.');
+  const headers=rows[headerIndex];
+  const map={
+    code:findHeader(headers,['Mã','Mã vật tư','Mã hàng']),
+    name:findHeader(headers,['Tên vật tư','Tên hàng','Tên sản phẩm']),
+    unit:findHeader(headers,['Đơn vị tính','ĐVT','Đơn vị']),
+    lot:findHeader(headers,['Số lô','Số LOT','Lot']),
+    expiry:findHeader(headers,['Hạn dùng','Hạn sử dụng','Ngày hết hạn']),
+    date:7,
+    qty:findHeader(headers,['Số lượng','SL']),
+    amount:findHeader(headers,['Thành tiền','Tổng tiền']),
+    price:findHeader(headers,['Đơn giá','Giá nhập'])
+  };
+  // Dữ liệu mẫu có tiêu đề chuẩn; fallback theo vị trí nếu thiếu tiêu đề.
+  const fallback={code:1,name:2,unit:3,lot:4,expiry:5,qty:11,amount:13,price:12};
+  Object.keys(map).forEach(k=>{if(map[k]<0)map[k]=fallback[k];});
+  const data=rows.slice(headerIndex+1).filter(r=>r.some(v=>v!==''&&v!=null));
+  return data.map(r=>{
+    const qty=number(r[map.qty]), price=number(r[map.price]);
+    let amount=number(r[map.amount]);
+    if(!amount && qty && price) amount=qty*price;
+    return {code:r[map.code],name:r[map.name],unit:r[map.unit],lot:r[map.lot],expiry:fmtDate(r[map.expiry]),date:r[map.date],qty,amount};
+  }).filter(x=>x.code||x.name);
+}
+function render(){
+  const total=items.reduce((s,x)=>s+number(x.amount),0);
+  const date=$('receiptDate').value || (items[0]?fmtDate(items[0].date):'');
+  const today=new Date();
+  const signatureDate=`Ngày ${today.getDate()} tháng ${today.getMonth()+1} năm ${today.getFullYear()}`;
+  const info=(label,id)=>`${label} ${escapeHtml($(id).value)}`;
+  let rows=items.map((x,i)=>`<tr>
+    <td class="num">${i+1}</td><td>${escapeHtml(x.code)}</td><td>${escapeHtml(x.name)}</td>
+    <td class="center">${escapeHtml(x.unit)}</td><td class="center">${escapeHtml(x.lot)}</td>
+    <td class="center">${escapeHtml(x.expiry)}</td><td class="money">${money(x.qty)}</td><td class="money">${money(x.amount)}</td>
+  </tr>`).join('');
+  if(!rows) rows='<tr><td colspan="8" class="center">Chưa có dữ liệu</td></tr>';
+  $('paper').innerHTML=`
+  <table class="no-border">
+    <tr><td colspan="4" class="bold">SỞ Y TẾ THÀNH PHỐ HỒ CHÍ MINH</td><td colspan="4" class="right meta">Mẫu số C30-HD</td></tr>
+    <tr><td colspan="4" class="bold">CÔNG TY TNHH SAMSUNGBEST CLINIC</td><td colspan="4" class="right meta">(Ban hành kèm theo Thông tư 107/2017/TT-BTC)</td></tr>
+    <tr><td colspan="4">MĐVQHNS:</td><td colspan="4" class="right meta">24/11/2017</td></tr>
+    <tr><td colspan="8" class="center title">PHIẾU NHẬP KHO</td></tr>
+    <tr><td colspan="8" class="center">Ngày ...... tháng ...... năm ......</td></tr>
+    <tr><td colspan="8" class="center">${info('Số:','receiptNo')}</td></tr>
+    <tr><td colspan="4">${info('Họ tên người giao:','supplier')}</td><td colspan="4">${date?'Ngày nhập: '+escapeHtml(date):'Ngày nhập:'}</td></tr>
+    <tr><td colspan="8">${info('Theo hóa đơn số:','invoiceNo')}</td></tr>
+    <tr><td colspan="8">${info('Của:','fromName')}</td></tr>
+    <tr><td colspan="8">${info('Nhập tại kho:','warehouse')}</td></tr>
+    <tr><td colspan="8">${info('Địa điểm:','location')}</td></tr>
+    <tr><td colspan="8">${info('Người nhập kho:','receiver')}</td></tr>
+  </table>
+  <br>
+  <table class="items">
+    <colgroup><col style="width:6%"><col style="width:13%"><col style="width:24%"><col style="width:10%"><col style="width:14%"><col style="width:11%"><col style="width:10%"><col style="width:12%"></colgroup>
+    <thead><tr><th>STT</th><th>Mã</th><th>Tên vật tư</th><th>Đơn vị tính</th><th>Số lô</th><th>Hạn dùng</th><th>Số lượng</th><th>Thành tiền</th></tr></thead>
+    <tbody>${rows}<tr class="total"><td colspan="7">Tổng cộng</td><td class="money">${money(total)}</td></tr></tbody>
+  </table>
+  <p><b>Tổng số tiền (viết bằng chữ):</b> <strong>${escapeHtml(numberToWords(total)).toLocaleUpperCase('vi')}</strong></p>
+  <p>Số chứng từ kèm theo: ${escapeHtml($('documents').value)}</p>
+  <p class="right" style="margin-top:22px">${signatureDate}</p>
+  <table class="signatures"><tr><td><b>Người lập</b><div class="signature-space"></div><i>(Ký, họ tên)</i></td><td><b>Người giao hàng</b><div class="signature-space"></div><i>(Ký, họ tên)</i></td><td><b>Thủ kho</b><div class="signature-space"></div><i>(Ký, họ tên)</i></td><td><b>Kế toán trưởng</b><div class="signature-space"></div><i>(Hoặc bộ phận có nhu cầu nhập)</i><div class="signature-space"></div><i>(Ký, họ tên)</i></td></tr></table>`;
+  $('itemCount').textContent=`${items.length} vật tư`;
+  $('printBtn').disabled=!items.length;
+}
+$('loadBtn').addEventListener('click',async()=>{
+  const file=$('excelFile').files[0];
+  if(!file){$('status').textContent='Vui lòng chọn file Excel trước.';return;}
+  try{
+    $('status').textContent='Đang đọc dữ liệu...';
+    const buffer=await file.arrayBuffer();
+    const wb=XLSX.read(buffer,{type:'array',cellDates:true});
+    items=parseWorkbook(wb);
+    if(!items.length) throw new Error('Đã đọc file nhưng không tìm thấy dòng vật tư.');
+    const importDate=items.find(item=>item.date!==''&&item.date!=null)?.date;
+    $('receiptDate').value=importDate==null?'':fmtDate(importDate);
+    $('status').textContent=`Đã đọc ${items.length} dòng vật tư từ sheet "${wb.SheetNames[0]}".`;
+    render();
+  }catch(e){$('status').textContent='Lỗi: '+e.message;console.error(e);}
+});
+if(!Array.isArray(window.SUPPLIER_NAMES)) throw new Error('Không tải được dữ liệu nhà cung cấp từ nhacungcap-data.js.');
+const supplierInput=$('fromName');
+const supplierOptions=$('supplierOptions');
+let activeSupplierIndex=-1;
+function showSupplierOptions(){
+  const query=norm(supplierInput.value.trim());
+  const allMatches=query?window.SUPPLIER_NAMES.filter(name=>norm(name).includes(query)):[];
+  const matches=allMatches.slice(0,100);
+  supplierOptions.replaceChildren();
+  activeSupplierIndex=-1;
+  if(!query){
+    supplierOptions.hidden=true;
+    supplierInput.setAttribute('aria-expanded','false');
+    return;
+  }
+  if(!matches.length){
+    const empty=document.createElement('div');
+    empty.className='supplier-empty';
+    empty.textContent='Không tìm thấy nhà cung cấp phù hợp.';
+    supplierOptions.append(empty);
+  }else{
+    matches.forEach((name,index)=>{
+      const option=document.createElement('div');
+      option.className='supplier-option';
+      option.id=`supplier-option-${index}`;
+      option.setAttribute('role','option');
+      option.setAttribute('aria-selected','false');
+      option.textContent=name;
+      option.addEventListener('pointerdown',event=>{
+        event.preventDefault();
+        supplierInput.value=name;
+        supplierOptions.hidden=true;
+        supplierInput.setAttribute('aria-expanded','false');
+        supplierInput.removeAttribute('aria-activedescendant');
+        render();
+      });
+      supplierOptions.append(option);
+    });
+    if(allMatches.length>matches.length){
+      const hint=document.createElement('div');
+      hint.className='supplier-empty';
+      hint.textContent='Có nhiều kết quả; hãy nhập thêm để thu hẹp danh sách.';
+      supplierOptions.append(hint);
+    }
+  }
+  supplierOptions.hidden=false;
+  supplierInput.setAttribute('aria-expanded','true');
+}
+function setActiveSupplier(index){
+  const options=supplierOptions.querySelectorAll('[role="option"]');
+  if(!options.length)return;
+  activeSupplierIndex=(index+options.length)%options.length;
+  options.forEach((option,i)=>{
+    const active=i===activeSupplierIndex;
+    option.classList.toggle('active',active);
+    option.setAttribute('aria-selected',String(active));
+  });
+  supplierInput.setAttribute('aria-activedescendant',options[activeSupplierIndex].id);
+  options[activeSupplierIndex].scrollIntoView({block:'nearest'});
+}
+supplierInput.addEventListener('input',()=>{showSupplierOptions();render();});
+supplierInput.addEventListener('keydown',event=>{
+  if(event.key==='ArrowDown'&&!supplierOptions.hidden){event.preventDefault();setActiveSupplier(activeSupplierIndex+1);}
+  else if(event.key==='ArrowUp'&&!supplierOptions.hidden){event.preventDefault();setActiveSupplier(activeSupplierIndex-1);}
+  else if(event.key==='Enter'&&!supplierOptions.hidden&&activeSupplierIndex>=0){
+    event.preventDefault();
+    supplierOptions.querySelectorAll('[role="option"]')[activeSupplierIndex].dispatchEvent(new Event('pointerdown',{bubbles:true}));
+  }else if(event.key==='Escape'){
+    supplierOptions.hidden=true;
+    supplierInput.setAttribute('aria-expanded','false');
+    supplierInput.removeAttribute('aria-activedescendant');
+  }
+});
+supplierInput.addEventListener('focus',showSupplierOptions);
+supplierInput.addEventListener('blur',()=>{
+  supplierOptions.hidden=true;
+  supplierInput.setAttribute('aria-expanded','false');
+});
+['receiptDate','receiptNo','supplier','invoiceNo','warehouse','location','receiver','documents'].forEach(id=>$(id).addEventListener('input',render));
+</script>
+</body>
+</html>
